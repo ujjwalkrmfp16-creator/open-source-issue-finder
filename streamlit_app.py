@@ -50,10 +50,42 @@ def render_issue(issue, key_prefix="issue"):
                 st.write(" · ".join(f"`{x}`" for x in issue["labels"]))
             if issue.get("body"):
                 st.write(issue["body"][:350] + ("…" if len(issue["body"]) > 350 else ""))
+            if "recommendation_score" in issue:
+                st.metric(
+                    "Overall Recommendation Score",
+                    f"{issue['recommendation_score']}/100"
+                )
+
             if "match_score" in issue:
                 st.progress(issue["match_score"] / 100)
-                st.write(f"**{issue['match_level']} — {issue['match_score']}/100**")
-                st.caption("Why recommended: " + "; ".join(issue["recommendation_reasons"]))
+                st.write(
+                    f"**Skill Match: {issue['match_level']} — "
+                    f"{issue['match_score']}/100**"
+                )
+
+                matched_skills = issue.get("matched_skills", [])
+
+                if matched_skills:
+                    st.write("**Matched skills:** " + ", ".join(matched_skills))
+                else:
+                    st.write("**Matched skills:** No explicit skill mention found")
+
+                st.caption(
+                    "Why recommended: "
+                    + "; ".join(issue.get("recommendation_reasons", []))
+                )
+
+            if "difficulty" in issue:
+                st.write(
+                    f"**Estimated difficulty: {issue['difficulty']}** "
+                    f"· Complexity indicator "
+                    f"{issue['difficulty_score']}/100"
+                )
+
+                st.caption(
+                    "Difficulty signals: "
+                    + "; ".join(issue.get("difficulty_reasons", []))
+                )
         with right:
             if st.button("Save", key=f"{key_prefix}-{issue['id']}"):
                 try:
@@ -81,11 +113,9 @@ with tab_search:
 
 with tab_recommend:
     st.subheader("Find issues that match your skills")
-    st.write("Choose the programming languages you know. The app searches matching repositories and ranks issues using a transparent rule-based score.")
+    st.write("Choose the programming languages you know. Results include a skill-match score and a heuristic difficulty estimate.")
     selected_skills = st.multiselect(
-        "Your programming skills",
-        LANGUAGES,
-        default=["Python"],
+        "Your programming skills", LANGUAGES, default=["Python"],
         help="Select one or more languages you can use to contribute.",
     )
     rec_label = st.selectbox(
@@ -101,16 +131,14 @@ with tab_recommend:
         if not selected_skills:
             st.warning("Select at least one programming skill.")
         else:
-            with st.spinner("Finding issues that match your skills..."):
+            with st.spinner("Finding and estimating issues..."):
                 try:
                     response = requests.get(
                         f"{API}/recommendations",
                         params=[
                             *[("skills", skill) for skill in selected_skills],
-                            ("label", rec_label),
-                            ("keywords", rec_keywords or ""),
-                            ("per_page", 20),
-                            ("page", 1),
+                            ("label", rec_label), ("keywords", rec_keywords or ""),
+                            ("per_page", 20), ("page", 1),
                         ],
                         timeout=60,
                     )
@@ -150,4 +178,4 @@ with tab_saved:
         st.warning(f"Could not load saved issues: {exc}")
 
 st.divider()
-st.caption("Reminder: recommendations are heuristic, not guarantees. Always open the original GitHub issue and read the repository's CONTRIBUTING.md before starting.")
+st.caption("Reminder: match scores and difficulty estimates are heuristics, not guarantees. Always open the original GitHub issue and read the repository's CONTRIBUTING.md before starting.")
